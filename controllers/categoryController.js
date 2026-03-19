@@ -1,53 +1,79 @@
 const Category = require('../models/Category');
 const Account = require('../models/Account');
 
-// 1. Lấy danh sách danh mục (Lọc theo tài khoản và chưa bị xóa)
+// LẤY DANH SÁCH DANH MỤC
 exports.getCategories = async (req, res) => {
     try {
-        const { accountId } = req.query;
-        if (!accountId) return res.status(400).json({ success: false, message: 'Thiếu accountId' });
+        const { userId, type } = req.query;
+        
+        // Chỉ lấy các danh mục không phải của hệ thống
+        const filter = { userId, isSystem: false };
+        if (type) filter.type = type;
 
-        const categories = await Category.find({ accountId: accountId, isDeleted: false });
-        res.status(200).json({ success: true, data: categories });
+        const categories = await Category.find(filter);
+        res.status(200).json(categories);
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Lỗi máy chủ', error: error.message });
+        res.status(500).json({ message: "Lỗi hệ thống", error: error.message });
     }
 };
 
 // 2. Tạo danh mục mới (ÁP DỤNG LUẬT: Tối đa 9 danh mục / 1 tài khoản)
 exports.createCategory = async (req, res) => {
     try {
-        const { userId, accountId, name, type, color, icon } = req.body;
+        const { userId, name, type, icon, color } = req.body;
         
-        if (!userId ||!accountId ||!name ||!type ||!color ||!icon) {
-            return res.status(400).json({ success: false, message: 'Vui lòng điền đủ thông tin' });
+        // Kiểm tra giới hạn 9 danh mục (không đếm danh mục isSystem)
+        const count = await Category.countDocuments({ userId, isSystem: false });
+        if (count >= 9) {
+            return res.status(400).json({ message: "Bạn chỉ được tạo tối đa 9 danh mục." });
         }
 
-        // KIỂM TRA LUẬT: Đếm số danh mục hiện có của tài khoản này
-        const currentCategoryCount = await Category.countDocuments({ accountId: accountId, isDeleted: false });
-        if (currentCategoryCount >= 9) {
-            return res.status(403).json({ 
-                success: false, 
-                message: 'Tài khoản này đã đạt giới hạn tối đa 9 danh mục. Vui lòng xóa bớt để thêm mới.' 
-            });
-        }
-
-        const newCategory = await Category.create({ userId, accountId, name, type, color, icon });
-        res.status(201).json({ success: true, data: newCategory });
+        const newCategory = new Category({ userId, name, type, icon, color, isSystem: false });
+        await newCategory.save();
+        res.status(201).json(newCategory);
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Lỗi máy chủ', error: error.message });
+        res.status(500).json({ message: "Lỗi tạo danh mục", error: error.message });
     }
 };
 
-// 3. Xóa mềm danh mục (Thay vì null, ta ẩn nó đi)
+// SỬA TÊN, ICON, MÀU SẮC DANH MỤC
+exports.updateCategory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, icon, color } = req.body;
+
+        const category = await Category.findByIdAndUpdate(
+            id,
+            { name, icon, color },
+            { new: true }
+        );
+
+        if (!category) return res.status(404).json({ message: "Không tìm thấy danh mục" });
+
+        res.status(200).json({ message: "Cập nhật thành công", category });
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi cập nhật danh mục", error: error.message });
+    }
+};
+
 exports.deleteCategory = async (req, res) => {
     try {
         const { id } = req.params;
-        const updatedCategory = await Category.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
-        
-        if (!updatedCategory) return res.status(404).json({ success: false, message: 'Không tìm thấy danh mục' });
-        res.status(200).json({ success: true, message: 'Đã xóa (ẩn) danh mục thành công' });
+
+        // 1. Tìm danh mục để lấy tên trước khi xóa
+        const category = await Category.findById(id);
+        if (!category) {
+            return res.status(404).json({ message: "Không tìm thấy danh mục" });
+        }
+
+        // 2. Xóa toàn bộ giao dịch có liên quan tới danh mục này
+        await Transaction.deleteMany({ category: category.name });
+
+        // 3. Xóa danh mục
+        await Category.findByIdAndDelete(id);
+
+        res.status(200).json({ message: "Đã xóa danh mục và toàn bộ giao dịch liên quan." });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Lỗi máy chủ', error: error.message });
+        res.status(500).json({ message: "Lỗi xóa danh mục", error: error.message });
     }
 };

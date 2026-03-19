@@ -16,9 +16,13 @@ mongoose.connect('mongodb://127.0.0.1:27017/finance_db')
 const transactionRoutes = require('./routes/transactionRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const accountRoutes = require('./routes/accountRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/accounts', accountRoutes);
+app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/auth', authRoutes);
 
 app.listen(3000, () => console.log('Server chạy ở port 3000'));
